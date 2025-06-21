@@ -152,3 +152,7 @@ You get:
 
 ---
 
+
+
+
+![20250621_1958_Azure Storage Implementation Guide_simple_compose_01jy9e6fxse2g8k1mkq2k0vc79](https://github.com/user-attachments/assets/419aa9e0-3a53-4443-b7e1-c9e386d43b9c)
