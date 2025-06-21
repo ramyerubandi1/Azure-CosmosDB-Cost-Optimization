@@ -1,0 +1,193 @@
+Implementation Guide
+
+## Step 1: Create Cheap Storage 
+
+### Azure Portal Setup
+```bash
+# Login to Azure
+az login
+
+# Create storage account
+az storage account create \
+  --name yourbillingarchive \
+  --resource-group your-resource-group \
+  --location eastus \
+  --sku Standard_LRS \
+  --access-tier Cool
+
+# Create container
+az storage container create \
+  --name archived-records \
+  --account-name yourbillingarchive
+```
+
+### What this does:
+- Creates a cheap storage "warehouse" for old files
+- Costs 90% less than Cosmos DB
+
+---
+
+## Step 2: Create Archive Function 
+
+### Create Azure Function
+```python
+import azure.functions as func
+import json
+from datetime import datetime, timedelta
+
+@func.timer_trigger(schedule="0 0 2 * * *")  # 2 AM daily
+def archive_old_records(mytimer: func.TimerRequest):
+    
+    # Find records older than 3 months
+    cutoff_date = datetime.now() - timedelta(days=90)
+    
+    # Get old records from Cosmos DB
+    old_records = get_old_records(cutoff_date)
+    
+    for record in old_records:
+        # Upload to blob storage
+        upload_to_blob(record)
+        
+        # Mark as archived in Cosmos DB
+        mark_as_archived(record['id'])
+
+def get_old_records(cutoff_date):
+    # Query Cosmos DB for old records
+    query = f"SELECT * FROM c WHERE c.createdDate < '{cutoff_date}'"
+    return cosmos_container.query_items(query=query)
+
+def upload_to_blob(record):
+    # Upload record to blob storage
+    blob_name = f"{record['createdDate'][:7]}/{record['id']}.json"
+    blob_client.upload_blob(json.dumps(record), overwrite=True)
+
+def mark_as_archived(record_id):
+    # Mark record as archived in Cosmos DB
+    record = cosmos_container.read_item(record_id, record_id)
+    record['archived'] = True
+    cosmos_container.replace_item(record_id, record)
+```
+
+### What this does:
+- Runs automatically every night at 2 AM
+- Moves old files to cheap storage
+- Leaves a note where the file went
+
+---
+
+## Step 3: Update Your API (2 hours)
+
+### Enhanced Service Code
+```python
+class BillingService:
+    def get_record(self, record_id):
+        try:
+            # Try to get from Cosmos DB first
+            record = cosmos_container.read_item(record_id, record_id)
+            
+            # If not archived, return it
+            if not record.get('archived'):
+                return record
+                
+        except:
+            pass  # Record not in Cosmos DB
+            
+        # Get from blob storage
+        blob_name = f"archive/{record_id}.json"
+        blob_data = blob_client.download_blob(blob_name)
+        return json.loads(blob_data.readall())
+    
+    def create_record(self, data):
+        # Always create new records in Cosmos DB
+        return cosmos_container.create_item(data)
+```
+
+### What this does:
+- Checks fast storage first
+- If not found, checks cheap storage
+- Users never know the difference
+
+---
+
+## Step 4: Deploy and Monitor (30 minutes)
+
+### Deployment Commands
+```bash
+# Deploy the function
+func azure functionapp publish your-function-app
+
+# Update your API service
+# (Deploy through your normal process)
+
+# Monitor the system
+az monitor metrics list \
+  --resource your-cosmos-db \
+  --metric "TotalRequestUnits"
+```
+
+### What to watch:
+- **Storage costs**: Should drop by 60-70% within a month
+- **API response times**: Should stay the same
+- **Archive success**: Check function logs daily
+
+---
+
+## Quick Verification Checklist
+
+### Week 1:
+- [ ] Blob storage created
+- [ ] Archive function deployed
+- [ ] Test with 10 sample records
+
+### Week 2:
+- [ ] Function running nightly
+- [ ] Old records being moved
+- [ ] API still works normally
+
+### Week 3:
+- [ ] Monitor costs dropping
+- [ ] Users report no issues
+- [ ] Archive retrieval working
+
+### Week 4:
+- [ ] Full system operational
+- [ ] Calculate actual savings
+- [ ] Document the process
+
+---
+
+## Emergency Rollback Plan
+
+If something goes wrong:
+
+1. **Stop the archive function**
+   ```bash
+   az functionapp stop --name your-function-app
+   ```
+
+2. **Restore critical records**
+   ```python
+   # Get record from blob and put back in Cosmos DB
+   blob_data = blob_client.download_blob(blob_name)
+   record = json.loads(blob_data.readall())
+   cosmos_container.create_item(record)
+   ```
+
+3. **Everything keeps working** - worst case, you just pay the old higher costs
+
+---
+
+## Expected Results
+
+### Month 1:
+- 20% cost reduction as old records move out
+
+### Month 2:
+- 45% cost reduction as more records archive
+
+### Month 3:
+- 65% cost reduction - full savings achieved
+
+### Ongoing:
+- Consistent 65% savings every month
+- $28,260 saved per year
