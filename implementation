@@ -109,7 +109,7 @@ class BillingService:
 
 ---
 
-## Step 4: Deploy and Monitor (30 minutes)
+## Step 4: Deploy and Monitor 
 
 ### Deployment Commands
 ```bash
